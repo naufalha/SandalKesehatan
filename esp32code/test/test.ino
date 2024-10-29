@@ -1,9 +1,9 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char* ssid = "your_SSID";  // Replace with your Wi-Fi SSID
-const char* password = "your_PASSWORD";  // Replace with your Wi-Fi password
-const char* mqtt_server = "your_MQTT_BROKER_IP";  // Replace with your MQTT broker IP
+const char* ssid = "YourNetworkName";  // Replace with your Wi-Fi SSID
+const char* password = "YourPassword";  // Replace with your Wi-Fi password
+const char* mqtt_server = "192.168.4.1";  // Replace with your MQTT broker IP
 
 // MQTT client and WiFi settings
 WiFiClient espClient;
@@ -11,8 +11,8 @@ PubSubClient client(espClient);
 
 const int numVibrators = 8;  // Number of vibration points
 int vibrators[numVibrators] = {15, 16, 17, 18, 19, 21, 22, 23};  // GPIO pins for the 8 vibrators
-int pwmValue = 0;            // Global PWM value to be set for frequency control
-int frequency = 100;         // Default frequency for the vibrators
+int pwmValue = 0;  // Global PWM value for all vibrators (0-255)
+bool vibratorState[numVibrators] = {false};  // Stores ON/OFF state for each vibrator
 
 void setup_wifi() {
   delay(10);
@@ -35,17 +35,19 @@ void callback(char* topic, byte* payload, unsigned int length) {
     message += (char)payload[i];
   }
 
-  // Handle binary data for turning on/off multiple vibrators
+  // Handle vibrate control message
   if (String(topic) == "/vibrate/") {
     if (message.length() == numVibrators) {
       for (int i = 0; i < numVibrators; i++) {
         if (message[i] == '1') {
-          ledcWrite(i, pwmValue);  // Turn on vibrator
+          vibratorState[i] = true;  // Turn vibrator ON
+          ledcWrite(vibrators[i], pwmValue);   // Set to current PWM value
           Serial.print("Vibrator ");
           Serial.print(i);
           Serial.println(" ON");
         } else if (message[i] == '0') {
-          ledcWrite(i, 0);  // Turn off vibrator
+          vibratorState[i] = false;  // Turn vibrator OFF
+          ledcWrite(vibrators[i], 0);  // Set PWM to 0
           Serial.print("Vibrator ");
           Serial.print(i);
           Serial.println(" OFF");
@@ -56,12 +58,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
   }
 
-  if (String(topic) == "/frequency") {
-    // Set the global frequency based on MQTT message
-    frequency = message.toInt();
-    pwmValue = map(frequency, 1, 1000, 0, 255);  // Map frequency to PWM range (1-1000 Hz)
-    Serial.print("Frequency set to ");
-    Serial.println(frequency);
+  // Handle setting PWM value
+  if (String(topic) == "/pwm") {
+    pwmValue = message.toInt();  // Convert message to integer for PWM
+    if (pwmValue < 0) pwmValue = 0;
+    if (pwmValue > 255) pwmValue = 255;
+    Serial.print("PWM set to ");
+    Serial.println(pwmValue);
+
+    // Update all ON vibrators with the new PWM value
+    for (int i = 0; i < numVibrators; i++) {
+      if (vibratorState[i]) {
+        ledcWrite(vibrators[i], pwmValue);  // Apply new PWM to all vibrators that are ON
+      }
+    }
   }
 }
 
@@ -71,7 +81,7 @@ void reconnect() {
     if (client.connect("ESP32Client")) {
       Serial.println("connected");
       client.subscribe("/vibrate/");   // Subscribe to vibrate control topic
-      client.subscribe("/frequency");  // Subscribe to frequency control topic
+      client.subscribe("/pwm");        // Subscribe to PWM control topic
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -87,9 +97,9 @@ void setup() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-  // Initialize the vibrator pins as PWM outputs
+  // Initialize PWM for the vibrators
   for (int i = 0; i < numVibrators; i++) {
-    ledcAttach(vibrators[i], 5000, 8);  // Attach pins with a base frequency of 5 kHz and 8-bit resolution
+    ledcAttach(vibrators[i], 5000, 8);  // Attach pin with 5 kHz frequency and 8-bit resolution
   }
 }
 
@@ -97,8 +107,5 @@ void loop() {
   if (!client.connected()) {
     reconnect();
   }
-  client.loop();  // Handle MQTT messages
-
-  // No need to modify loop because control happens in the callback
-  delay(100);  // Small delay to keep loop stable
+  client.loop();  // Handle incoming MQTT messages
 }
