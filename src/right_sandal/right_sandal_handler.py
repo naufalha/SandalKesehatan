@@ -1,74 +1,83 @@
+from machine import Pin
+import network
 import time
-import RPi.GPIO as GPIO
-from src.utils.mqtt_client import MQTTClient
+from umqtt.simple import MQTTClient
+import json
 
 class RightSandalHandler:
     def __init__(self):
-        # Initialize the MQTT client to subscribe to the topic
-        self.mqtt_client = MQTTClient("right_sandal_mqtt_node")
+        # WiFi credentials
+        self.WIFI_SSID = "YourNetwork"
+        self.WIFI_PASSWORD = "YourPassword"
         
-        # Define GPIO pins for each of the 8 points, e.g., "a" to "h"
-        self.vibration_points = {
-            "a": 17,
-            "b": 18,
-            "c": 27,
-            "d": 22,
-            "e": 23,
-            "f": 24,
-            "g": 25,
-            "h": 5,
-        }
+        # MQTT settings
+        self.MQTT_BROKER = "your_mqtt_broker_ip"
+        self.MQTT_PORT = 1883
+        self.MQTT_TOPIC = b"/sandal/right/button"
+        self.CLIENT_ID = "esp32_right_sandal"
+        
+        # Button setup (D15 = GPIO15)
+        self.button = Pin(15, Pin.IN, Pin.PULL_UP)  # Using pull-up resistor
+        self.last_state = None
 
-        # Initialize GPIO settings
-        GPIO.setmode(GPIO.BCM)
-        for pin in self.vibration_points.values():
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)  # Start all motors off
+    def connect_wifi(self):
+        self.wlan = network.WLAN(network.STA_IF)
+        self.wlan.active(True)
+        
+        if not self.wlan.isconnected():
+            print(f'Connecting to WiFi network: {self.WIFI_SSID}...')
+            self.wlan.connect(self.WIFI_SSID, self.WIFI_PASSWORD)
+            
+            # Wait for connection with timeout
+            max_wait = 10
+            while max_wait > 0:
+                if self.wlan.isconnected():
+                    break
+                max_wait -= 1
+                print('Waiting for connection...')
+                time.sleep(1)
+            
+            if self.wlan.isconnected():
+                print('WiFi connected successfully')
+                print('Network config:', self.wlan.ifconfig())
+            else:
+                print('WiFi connection failed')
+                raise Exception('WiFi connection failed')
 
-    def on_vibration_data(self, data):
-        """
-        Process each point in the data to control the respective motor.
-        Data format: {"a": frequency, "b": frequency, ...}
-        """
-        for point, frequency in data.items():
-            if point in self.vibration_points:
-                pin = self.vibration_points[point]
-                self.control_vibrator(pin, frequency)
+    def publish_button_state(self):
+        current_state = not self.button.value()  # Invert because of pull-up
+        
+        # Only publish if state has changed
+        if current_state != self.last_state:
+            self.last_state = current_state
+            message = json.dumps({"pressed": current_state})
+            print(f"Publishing button state: {message}")
+            self.mqtt_client.publish(self.MQTT_TOPIC, message)
 
-    def control_vibrator(self, pin, frequency):
-        """
-        Controls a GPIO pin to turn on and off based on the specified frequency.
-        """
-        if frequency > 0:
-            # Turn motor on for a period based on frequency
-            GPIO.output(pin, GPIO.HIGH)
-            time.sleep(1.0 / frequency)  # ON duration based on frequency
-            GPIO.output(pin, GPIO.LOW)
-            time.sleep(1.0 / frequency)  # OFF duration based on frequency
-        else:
-            GPIO.output(pin, GPIO.LOW)  # Turn off if frequency is zero
-
-    def start(self):
-        """
-        Start the MQTT client and listen for data on the /sandal/right topic.
-        """
-        self.mqtt_client.subscribe("/sandal/right")
-        print("Listening for vibration data on /sandal/right...")
-
-        # Continuously check for new data
-        while True:
-            message = self.mqtt_client.get_data()
-            if message:
-                try:
-                    # Parse message as a dictionary and handle vibration data
-                    data = eval(message)  # Evaluate the dictionary message safely
-                    self.on_vibration_data(data)
-                except Exception as e:
-                    print("Error in processing data:", e)
-            time.sleep(0.1)  # Polling delay
-
-    def cleanup(self):
-        """
-        Clean up GPIO resources when done.
-        """
-        GPIO.cleanup()
+    def run(self):
+        try:
+            # Connect to WiFi
+            self.connect_wifi()
+            
+            # Connect to MQTT broker
+            print('Connecting to MQTT broker...')
+            self.mqtt_client = MQTTClient(
+                self.CLIENT_ID, 
+                self.MQTT_BROKER,
+                port=self.MQTT_PORT
+            )
+            self.mqtt_client.connect()
+            print('Connected to MQTT broker')
+            
+            # Main loop
+            print('Monitoring button state...')
+            while True:
+                self.publish_button_state()
+                time.sleep(0.1)  # Debounce delay
+                
+        except Exception as e:
+            print('Error:', e)
+            
+        finally:
+            if hasattr(self, 'mqtt_client'):
+                self.mqtt_client.disconnect()
