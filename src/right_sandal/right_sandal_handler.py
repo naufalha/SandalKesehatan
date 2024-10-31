@@ -1,6 +1,8 @@
 import time
 import RPi.GPIO as GPIO
-from src.utils.mqtt_client import MQTTClient
+from utils.mqtt_client import MQTTClient
+
+
 
 class RightSandalHandler:
     def __init__(self):
