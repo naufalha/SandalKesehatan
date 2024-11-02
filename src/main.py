@@ -1,5 +1,5 @@
 from right_sandal.right_sandal_handler import RightSandalHandler
-from detection.vibration_detection import VibrationDetection
+from detection.vibration_detection import perform_vibration_test
 
 def main():
     right_sandal_handler = RightSandalHandler()
