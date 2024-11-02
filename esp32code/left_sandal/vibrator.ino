@@ -4,7 +4,7 @@
 // Wi-Fi and MQTT server credentials
 const char* ssid = "Milos";
 const char* password = "11111111";
-const char* mqtt_server = "192.168.47.225";
+const char* mqtt_server = "192.168.4.1";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
