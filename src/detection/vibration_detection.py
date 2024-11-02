@@ -37,7 +37,7 @@ def perform_vibration_test(client):
 
         # Determine if the patient felt it above the threshold
         felt_vibration = right_button_pressed and (freq - freq_step) > neuropathy_threshold
-        client.publish("/nerve", json.dumps({point: felt_vibration}))
+        client.publish("/nerve/right", json.dumps({point: felt_vibration}))
         print(f"Published to /nerve: {point} felt {felt_vibration}")
 
         # Count positive result if neuropathy detected
@@ -60,7 +60,7 @@ def perform_vibration_test(client):
 
         # Determine if the patient felt it above the threshold
         felt_vibration = left_button_pressed and (freq - freq_step) > neuropathy_threshold
-        client.publish("/nerve", json.dumps({point: felt_vibration}))
+        client.publish("/nerve/left", json.dumps({point: felt_vibration}))
         print(f"Published to /nerve: {point} felt {felt_vibration}")
 
         # Count positive result if neuropathy detected
