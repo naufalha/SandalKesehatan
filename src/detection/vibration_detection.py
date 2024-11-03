@@ -32,9 +32,11 @@ def perform_vibration_test(client):
     neuropathy_threshold = 25  # Hz threshold for neuropathy
     step_duration = 2    # seconds
 
-    # Track results to calculate diagnosis percentage
-    total_points = len(left_points) + len(right_points)
-    positive_results = 0
+    # Initialize results dictionary to track neuropathy status for each point
+    results = {
+        "kanan": {point: 0 for point in right_points},
+        "kiri": {point: 0 for point in left_points}
+    }
 
     # Iterate over right and left sandal points
     for point in right_points:
@@ -53,16 +55,11 @@ def perform_vibration_test(client):
 
         # Turn off the vibrator after finishing the test for this point
         client.publish("/sandal/right", json.dumps({point: 0}))
-        print(f"Right {point}: Vibrator turned off")
+        time.sleep(0.5)  # Small delay to ensure message is sent
 
-        # Determine if the patient felt it above the threshold
+        # Check if patient felt the vibration above the neuropathy threshold
         felt_vibration = right_button_pressed and (freq - freq_step) > neuropathy_threshold
-        client.publish("/nerve/right", json.dumps({point: felt_vibration}))
-        print(f"Published to /nerve: {point} felt {felt_vibration}")
-
-        # Count positive result if neuropathy detected
-        if felt_vibration:
-            positive_results += 1
+        results["kanan"][point] = int(felt_vibration)  # 1 for positive, 0 for negative neuropathy
 
     for point in left_points:
         freq = start_freq
@@ -80,21 +77,15 @@ def perform_vibration_test(client):
 
         # Turn off the vibrator after finishing the test for this point
         client.publish("/sandal/left", json.dumps({point: 0}))
-        print(f"Left {point}: Vibrator turned off")
+        time.sleep(0.5)  # Small delay to ensure message is sent
 
-        # Determine if the patient felt it above the threshold
+        # Check if patient felt the vibration above the neuropathy threshold
         felt_vibration = left_button_pressed and (freq - freq_step) > neuropathy_threshold
-        client.publish("/nerve/left", json.dumps({point: felt_vibration}))
-        print(f"Published to /nerve: {point} felt {felt_vibration}")
+        results["kiri"][point] = int(felt_vibration)  # 1 for positive, 0 for negative neuropathy
 
-        # Count positive result if neuropathy detected
-        if felt_vibration:
-            positive_results += 1
-
-    # Calculate and publish diagnosis percentage
-    diagnosis_percentage = (positive_results / total_points) * 100
-    client.publish("/diagnose", json.dumps({"diagnosis_percentage": diagnosis_percentage}))
-    print(f"Diagnosis completed. Published to /diagnose: {diagnosis_percentage}% neuropathy detected.")
+    # Publish the results to the /nerve topic
+    client.publish("/nerve", json.dumps(results))
+    print(f"Published neuropathy test results to /nerve: {json.dumps(results)}")
 
 def main():
     # Initialize MQTT client
