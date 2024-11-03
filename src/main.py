@@ -2,10 +2,10 @@ from threading import Thread
 import time
 import json
 import paho.mqtt.client as mqtt
+import subprocess
 from right_sandal.right_sandal_handler import RightSandalHandler
-from detection.vibration_detection import VibrationDetection
 
-# Global variable to control the vibration detection start
+# Global variable to control the start of the vibration detection
 start_detection = False
 
 # Callback function for handling MQTT messages
@@ -26,7 +26,7 @@ def mqtt_listener():
     client.connect("localhost", 1883)
     client.loop_start()
 
-    # Subscribe to necessary topics
+    # Subscribe to the /start topic
     client.subscribe("/start")
     
     print("Waiting for 'detection' command on /start...")
@@ -35,23 +35,23 @@ def mqtt_listener():
     while True:
         time.sleep(1)
 
-def delayed_vibration_detection(vibration_detection):
+def delayed_vibration_detection():
     global start_detection
-    # Wait for the start signal
+    # Wait until start_detection is True
     while not start_detection:
         time.sleep(0.1)  # Check every 100ms
 
-    # Start the vibration detection process
-    vibration_detection.run()
+    # Start the vibration detection script
+    print("Running vibration detection script...")
+    subprocess.run(["python3", "detection/vibration_detection.py"])
 
 def main():
-    # Initialize instances
+    # Initialize the right sandal handler instance
     right_sandal_handler = RightSandalHandler()
-    vibration_detection = VibrationDetection()
 
     # Create threads for concurrent execution
     handler_thread = Thread(target=right_sandal_handler.run)
-    detection_thread = Thread(target=delayed_vibration_detection, args=(vibration_detection,))
+    detection_thread = Thread(target=delayed_vibration_detection)
     listener_thread = Thread(target=mqtt_listener)
 
     # Start threads
@@ -59,10 +59,4 @@ def main():
     listener_thread.start()
     detection_thread.start()
 
-    # Wait for both threads to finish
-    handler_thread.join()
-    listener_thread.join()
-    detection_thread.join()
-
-if __name__ == "__main__":
-    main()
+    # Wait
