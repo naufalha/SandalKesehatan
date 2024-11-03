@@ -51,6 +51,10 @@ def perform_vibration_test(client):
             # Increase frequency for next cycle
             freq += freq_step
 
+        # Turn off the vibrator after finishing the test for this point
+        client.publish("/sandal/right", json.dumps({point: 0}))
+        print(f"Right {point}: Vibrator turned off")
+
         # Determine if the patient felt it above the threshold
         felt_vibration = right_button_pressed and (freq - freq_step) > neuropathy_threshold
         client.publish("/nerve/right", json.dumps({point: felt_vibration}))
@@ -73,6 +77,10 @@ def perform_vibration_test(client):
 
             # Increase frequency for next cycle
             freq += freq_step
+
+        # Turn off the vibrator after finishing the test for this point
+        client.publish("/sandal/left", json.dumps({point: 0}))
+        print(f"Left {point}: Vibrator turned off")
 
         # Determine if the patient felt it above the threshold
         felt_vibration = left_button_pressed and (freq - freq_step) > neuropathy_threshold
