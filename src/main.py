@@ -22,15 +22,18 @@ def mqtt_listener():
     client = mqtt.Client()
     client.on_message = on_message
 
-    # Connect to the local MQTT broker
-    client.connect("localhost", 1883)
-    client.loop_start()
+    try:
+        # Connect to the local MQTT broker
+        client.connect("localhost", 1883)
+        client.loop_start()
+        print("Connected to MQTT broker and waiting for 'detection' command on /start...")
+    except Exception as e:
+        print(f"Error connecting to MQTT broker: {e}")
+        return
 
     # Subscribe to the /start topic
     client.subscribe("/start")
     
-    print("Waiting for 'detection' command on /start...")
-
     # Keep the listener running
     while True:
         time.sleep(1)
@@ -43,7 +46,11 @@ def delayed_vibration_detection():
 
     # Start the vibration detection script
     print("Running vibration detection script...")
-    subprocess.run(["python3", "detection/vibration_detection.py"])
+    try:
+        result = subprocess.run(["python3", "detection/vibration_detection.py"], check=True)
+        print("Vibration detection completed:", result)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running vibration detection script: {e}")
 
 def main():
     # Initialize the right sandal handler instance
@@ -59,4 +66,10 @@ def main():
     listener_thread.start()
     detection_thread.start()
 
-    # Wait
+    # Wait for all threads to finish
+    handler_thread.join()
+    listener_thread.join()
+    detection_thread.join()
+
+if __name__ == "__main__":
+    main()
