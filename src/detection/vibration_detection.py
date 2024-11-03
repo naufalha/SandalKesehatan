@@ -1,5 +1,21 @@
 import time
 import json
+import paho.mqtt.client as mqtt
+
+# Global variables for button press detection
+left_button_pressed = False
+right_button_pressed = False
+
+# Callback functions to handle button press events from MQTT
+def on_message(client, userdata, message):
+    global left_button_pressed, right_button_pressed
+    topic = message.topic
+    payload = json.loads(message.payload.decode())
+    
+    if topic == "/button/left" and payload:
+        left_button_pressed = True
+    elif topic == "/button/right" and payload:
+        right_button_pressed = True
 
 # Detection function for neuropathy test
 def perform_vibration_test(client):
@@ -71,3 +87,25 @@ def perform_vibration_test(client):
     diagnosis_percentage = (positive_results / total_points) * 100
     client.publish("/diagnose", json.dumps({"diagnosis_percentage": diagnosis_percentage}))
     print(f"Diagnosis completed. Published to /diagnose: {diagnosis_percentage}% neuropathy detected.")
+
+def main():
+    # Initialize MQTT client
+    client = mqtt.Client()
+    client.on_message = on_message
+    
+    # Connect to local MQTT broker
+    client.connect("localhost", 1883)
+    client.loop_start()
+    
+    # Subscribe to button press topics
+    client.subscribe("/button/left")
+    client.subscribe("/button/right")
+    
+    # Perform the neuropathy test
+    perform_vibration_test(client)
+
+    # Stop MQTT loop after the test is complete
+    client.loop_stop()
+
+if __name__ == "__main__":
+    main()
